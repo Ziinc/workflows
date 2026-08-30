@@ -59,7 +59,7 @@ defmodule Workflows.PayloadTemplate do
     if String.ends_with?(key, ".$") do
       with {:ok, value} <- transform_value(value, ctx, args) do
         # remove .$
-        key = String.slice(key, 0..-3)
+        key = String.slice(key, 0..-3//1)
         do_apply(template, ctx, args, [{key, value} | acc])
       end
     else
@@ -72,7 +72,7 @@ defmodule Workflows.PayloadTemplate do
       String.starts_with?(value, "$$") ->
         # JsonPath applied to ctx
         # remove extra $
-        value = String.slice(value, 1..-1)
+        value = String.slice(value, 1..-1//1)
         apply_path(ctx, value)
 
       String.starts_with?(value, "$") ->
