@@ -6,8 +6,8 @@ defmodule Workflows.Activity.Map do
   alias Workflows.Catcher
   alias Workflows.Event
   alias Workflows.Path
-  alias Workflows.ReferencePath
   alias Workflows.PayloadTemplate
+  alias Workflows.ReferencePath
   alias Workflows.Retrier
   alias Workflows.Workflow
 

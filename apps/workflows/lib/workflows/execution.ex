@@ -52,7 +52,8 @@ defmodule Workflows.Execution do
     end
   end
 
-  defp update_state(execution, new_state) do
+  @spec update_state(t(), State.t()) :: t()
+  defp update_state(%__MODULE__{} = execution, new_state) do
     %__MODULE__{execution | state: new_state}
   end
 

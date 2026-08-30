@@ -1,7 +1,7 @@
 defmodule Workflows.State.TaskTest do
   use ExUnit.Case
 
-  alias Workflows.{Activity, State, Command, Event, Error}
+  alias Workflows.{Activity, Command, Error, Event, State}
 
   @ctx %{
     "state" => "task"

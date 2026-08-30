@@ -45,21 +45,13 @@ defmodule Workflows.Rule do
 
   defp do_create(%{"Or" => cases}) do
     with {:ok, inner_rules} <- do_create_cases(cases) do
-      rule = fn args ->
-        Enum.any?(inner_rules, fn rule -> rule.(args) end)
-      end
-
-      {:ok, rule}
+      {:ok, fn args -> any_rule_matches?(inner_rules, args) end}
     end
   end
 
   defp do_create(%{"And" => cases}) do
     with {:ok, inner_rules} <- do_create_cases(cases) do
-      rule = fn args ->
-        Enum.all?(inner_rules, fn rule -> rule.(args) end)
-      end
-
-      {:ok, rule}
+      {:ok, fn args -> all_rules_match?(inner_rules, args) end}
     end
   end
 
@@ -133,80 +125,75 @@ defmodule Workflows.Rule do
     do: compare_with_path_value(&==/2, &is_boolean/1, variable, value)
 
   defp do_create(%{"TimestampEquals" => value, "Variable" => variable}),
-    do: compare_with_value(&timestamp_eq/2, &is_timestamp/1, variable, value)
+    do: compare_with_value(&timestamp_eq/2, &timestamp?/1, variable, value)
 
   defp do_create(%{"TimestampEqualsPath" => value, "Variable" => variable}),
-    do: compare_with_path_value(&timestamp_eq/2, &is_timestamp/1, variable, value)
+    do: compare_with_path_value(&timestamp_eq/2, &timestamp?/1, variable, value)
 
   defp do_create(%{"TimestampLessThan" => value, "Variable" => variable}),
-    do: compare_with_value(&timestamp_lt/2, &is_timestamp/1, variable, value)
+    do: compare_with_value(&timestamp_lt/2, &timestamp?/1, variable, value)
 
   defp do_create(%{"TimestampLessThanPath" => value, "Variable" => variable}),
-    do: compare_with_path_value(&timestamp_lt/2, &is_timestamp/1, variable, value)
+    do: compare_with_path_value(&timestamp_lt/2, &timestamp?/1, variable, value)
 
   defp do_create(%{"TimestampGreaterThan" => value, "Variable" => variable}),
-    do: compare_with_value(&timestamp_gt/2, &is_timestamp/1, variable, value)
+    do: compare_with_value(&timestamp_gt/2, &timestamp?/1, variable, value)
 
   defp do_create(%{"TimestampGreaterThanPath" => value, "Variable" => variable}),
-    do: compare_with_path_value(&timestamp_gt/2, &is_timestamp/1, variable, value)
+    do: compare_with_path_value(&timestamp_gt/2, &timestamp?/1, variable, value)
 
   defp do_create(%{"TimestampLessThanEquals" => value, "Variable" => variable}),
-    do: compare_with_value(&timestamp_lte/2, &is_timestamp/1, variable, value)
+    do: compare_with_value(&timestamp_lte/2, &timestamp?/1, variable, value)
 
   defp do_create(%{"TimestampLessThanEqualsPath" => value, "Variable" => variable}),
-    do: compare_with_path_value(&timestamp_lte/2, &is_timestamp/1, variable, value)
+    do: compare_with_path_value(&timestamp_lte/2, &timestamp?/1, variable, value)
 
   defp do_create(%{"TimestampGreaterThanEquals" => value, "Variable" => variable}),
-    do: compare_with_value(&timestamp_gte/2, &is_timestamp/1, variable, value)
+    do: compare_with_value(&timestamp_gte/2, &timestamp?/1, variable, value)
 
   defp do_create(%{"TimestampGreaterThanEqualsPath" => value, "Variable" => variable}),
-    do: compare_with_path_value(&timestamp_gte/2, &is_timestamp/1, variable, value)
+    do: compare_with_path_value(&timestamp_gte/2, &timestamp?/1, variable, value)
 
   defp do_create(%{"IsNull" => true, "Variable" => variable}) do
     with {:ok, variable_fn} <- path_value(variable, result_type: :value_path) do
-      rule = fn args ->
-        case variable_fn.(args) do
-          # returned nil because the value is not present
-          {nil, ""} -> false
-          # returned nil because the value is null
-          {nil, _} -> true
-          # value not null
-          {_, _} -> false
-        end
-      end
-
-      {:ok, rule}
+      {:ok, fn args -> null?(variable_fn.(args)) end}
     end
   end
 
   defp do_create(%{"IsPresent" => true, "Variable" => variable}) do
     with {:ok, variable_fn} <- path_value(variable, result_type: :path) do
-      rule = fn args ->
-        case variable_fn.(args) do
-          "" -> false
-          _ -> true
-        end
-      end
-
-      {:ok, rule}
+      {:ok, fn args -> present?(variable_fn.(args)) end}
     end
   end
 
   defp do_create(%{"IsNumeric" => true, "Variable" => variable}),
-    do: is_type(&is_number/1, variable)
+    do: type?(&is_number/1, variable)
 
   defp do_create(%{"IsString" => true, "Variable" => variable}),
-    do: is_type(&is_binary/1, variable)
+    do: type?(&is_binary/1, variable)
 
   defp do_create(%{"IsBoolean" => true, "Variable" => variable}),
-    do: is_type(&is_boolean/1, variable)
+    do: type?(&is_boolean/1, variable)
 
   defp do_create(%{"IsTimestamp" => true, "Variable" => variable}),
-    do: is_type(&is_timestamp/1, variable)
+    do: type?(&timestamp?/1, variable)
 
   defp do_create(_rule) do
     {:error, :invalid_rule}
   end
+
+  defp any_rule_matches?(rules, args), do: Enum.any?(rules, fn rule -> rule.(args) end)
+  defp all_rules_match?(rules, args), do: Enum.all?(rules, fn rule -> rule.(args) end)
+
+  # returned nil because the value is not present
+  defp null?({nil, ""}), do: false
+  # returned nil because the value is null
+  defp null?({nil, _}), do: true
+  # value not null
+  defp null?({_, _}), do: false
+
+  defp present?(""), do: false
+  defp present?(_), do: true
 
   defp do_create_cases(cases) when is_list(cases) do
     do_create_cases(cases, [])
@@ -255,7 +242,7 @@ defmodule Workflows.Rule do
     end
   end
 
-  defp is_type(check_type, variable) do
+  defp type?(check_type, variable) do
     with {:ok, variable_fn} <- path_value(variable) do
       rule = fn args ->
         variable_value = variable_fn.(args)
@@ -301,7 +288,7 @@ defmodule Workflows.Rule do
     end
   end
 
-  defp is_timestamp(value) do
+  defp timestamp?(value) do
     case DateTime.from_iso8601(value) do
       {:ok, _, _} -> true
       _ -> false

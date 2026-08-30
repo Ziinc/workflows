@@ -40,29 +40,32 @@ defmodule Workflows.State.Parallel do
   defp do_execute_command(%State.Parallel{} = state, %Activity.Parallel{} = activity, ctx, cmd) do
     case state.inner do
       {:running, _state_args, _effective_args, children} ->
-        case Command.pop_scope(cmd) do
-          {{:branch, branch_index}, cmd} ->
-            child_state =
-              Enum.zip(activity.branches, children)
-              |> Enum.at(branch_index)
-
-            case child_state do
-              {branch, {:continue, child_state}} ->
-                with {:ok, event} <- Workflow.execute(branch, child_state, ctx, cmd) do
-                  {:ok, event |> Event.push_scope({:branch, branch_index})}
-                end
-
-              _ ->
-                {:error, :invalid_command, cmd}
-            end
-
-          _ ->
-            {:error, :invalid_command, cmd}
-        end
+        execute_running_command(activity, children, ctx, cmd)
 
       _ ->
         {:error, :invalid_command, cmd}
     end
+  end
+
+  defp execute_running_command(activity, children, ctx, cmd) do
+    case Command.pop_scope(cmd) do
+      {{:branch, branch_index}, cmd} ->
+        child_state = activity.branches |> Enum.zip(children) |> Enum.at(branch_index)
+        execute_branch_command(child_state, branch_index, ctx, cmd)
+
+      _ ->
+        {:error, :invalid_command, cmd}
+    end
+  end
+
+  defp execute_branch_command({branch, {:continue, child_state}}, branch_index, ctx, cmd) do
+    with {:ok, event} <- Workflow.execute(branch, child_state, ctx, cmd) do
+      {:ok, Event.push_scope(event, {:branch, branch_index})}
+    end
+  end
+
+  defp execute_branch_command(_child_state, _branch_index, _ctx, cmd) do
+    {:error, :invalid_command, cmd}
   end
 
   defp do_project(%State.Parallel{} = state, activity, event) do
@@ -144,34 +147,57 @@ defmodule Workflows.State.Parallel do
   defp do_project_scoped(%State.Parallel{} = state, activity, event) do
     case state.inner do
       {:running, state_args, effective_args, children} ->
-        case Event.pop_scope(event) do
-          {{:branch, branch_index}, event} ->
-            child_state =
-              Enum.zip(activity.branches, children)
-              |> Enum.at(branch_index)
-
-            case child_state do
-              {branch, {:continue, child_state}} ->
-                new_child_state = project_child(child_state, branch, event)
-                new_children = List.replace_at(children, branch_index, new_child_state)
-
-                new_state = %State.Parallel{
-                  state
-                  | inner: {:running, state_args, effective_args, new_children}
-                }
-
-                {:stay, new_state}
-
-              _ ->
-                # Wrong branch index
-                {:error, :invalid_event, event}
-            end
-
-          {_, _} ->
-            {:error, :invalid_event, event}
-        end
+        project_running_scoped(state, activity, event, state_args, effective_args, children)
 
       _ ->
+        {:error, :invalid_event, event}
+    end
+  end
+
+  defp project_running_scoped(
+         %State.Parallel{} = state,
+         activity,
+         event,
+         state_args,
+         effective_args,
+         children
+       ) do
+    case Event.pop_scope(event) do
+      {{:branch, branch_index}, event} ->
+        project_branch_scoped(
+          state,
+          activity,
+          event,
+          state_args,
+          effective_args,
+          children,
+          branch_index
+        )
+
+      {_, _} ->
+        {:error, :invalid_event, event}
+    end
+  end
+
+  defp project_branch_scoped(
+         %State.Parallel{} = state,
+         activity,
+         event,
+         state_args,
+         effective_args,
+         children,
+         branch_index
+       ) do
+    case activity.branches |> Enum.zip(children) |> Enum.at(branch_index) do
+      {branch, {:continue, child_state}} ->
+        new_child_state = project_child(child_state, branch, event)
+        new_children = List.replace_at(children, branch_index, new_child_state)
+
+        {:stay,
+         %State.Parallel{state | inner: {:running, state_args, effective_args, new_children}}}
+
+      _ ->
+        # Wrong branch index
         {:error, :invalid_event, event}
     end
   end

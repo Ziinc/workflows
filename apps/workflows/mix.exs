@@ -9,7 +9,7 @@ defmodule Workflows.MixProject do
       name: "Workflows",
       app: :workflows,
       version: @version,
-      elixir: "~> 1.20",
+      elixir: "~> 1.18",
       build_path: "../../_build",
       deps_path: "../../deps",
       lockfile: "../../mix.lock",

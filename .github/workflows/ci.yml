@@ -10,9 +10,22 @@ on:
 
 jobs:
   ci:
-    name: CI
+    name: Elixir ${{ matrix.elixir }}
     env:
       MIX_ENV: test
+      MISE_ELIXIR_VERSION: ${{ matrix.elixir }}
+      MISE_ERLANG_VERSION: ${{ matrix.otp }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - elixir: 1.18.5-otp-27
+            otp: 27.3.4
+          - elixir: 1.19.6-otp-27
+            otp: 27.3.4
+          - elixir: 1.20.4-otp-28
+            otp: 28.5.0.5
+
     runs-on: ubuntu-latest
 
     steps:
@@ -24,8 +37,8 @@ jobs:
       - name: Cache Mix
         uses: actions/cache@v4
         with:
-          key: ${{ runner.os }}-mix-${{ hashFiles('mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-
+          key: ${{ runner.os }}-${{ matrix.elixir }}-mix-${{ hashFiles('mix.lock') }}
+          restore-keys: ${{ runner.os }}-${{ matrix.elixir }}-mix-
           path: |
             deps
             _build
@@ -36,16 +49,11 @@ jobs:
       - name: Check formatting
         run: mix format --check-formatted
 
-      - name: Compile
-        run: mix compile
+      - name: Compile with warnings as errors
+        run: mix compile --warnings-as-errors
 
-      # TODO: enable once existing warnings/credo findings are cleaned up
-      # - name: Compile with warnings as errors
-      #   run: mix compile --warnings-as-errors
-
-      # TODO: enable once existing credo findings are cleaned up (see code-quality report)
-      # - name: Run Credo
-      #   run: mix credo
+      - name: Run Credo
+        run: mix credo --strict
 
       - name: Run tests
         run: mix test
@@ -55,7 +63,7 @@ jobs:
         id: plt-cache
         with:
           path: priv/plts
-          key: ${{ runner.os }}-plts-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ matrix.elixir }}-plts-${{ hashFiles('mix.lock') }}
 
       - name: Create PLTs
         if: steps.plt-cache.outputs.cache-hit != 'true'

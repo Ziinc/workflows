@@ -114,15 +114,7 @@ defmodule Workflows.State.Task do
   defp do_project(%State.Task{} = state, activity, %Event.TaskRetried{} = event) do
     case state.inner do
       {:waiting_response, state_args, effective_args, retriers_state} ->
-        case update_retriers_state(retriers_state, activity.retry, event.error, []) do
-          {:ok, new_retriers_state} ->
-            new_inner = {:waiting_response, state_args, effective_args, new_retriers_state}
-            new_state = %State.Task{state | inner: new_inner}
-            {:stay, new_state}
-
-          {:error, _reason} ->
-            {:error, :invalid_event, event}
-        end
+        project_retried(state, activity, event, state_args, effective_args, retriers_state)
 
       _ ->
         {:error, :invalid_event, event}
@@ -132,15 +124,7 @@ defmodule Workflows.State.Task do
   defp do_project(%State.Task{} = state, activity, %Event.TaskFailed{} = event) do
     case state.inner do
       {:waiting_response, _state_args, _effective_args, _retriers_state} ->
-        case Enum.find(activity.catch, fn c -> Catcher.matches?(c, event.error) end) do
-          nil ->
-            {:fail, event.error}
-
-          catcher ->
-            # TODO: add result path here
-            error = %{"Name" => event.error.name, "Cause" => event.error.cause}
-            {:transition, {:next, catcher.next}, error}
-        end
+        project_failed(activity, event)
 
       _ ->
         {:error, :invalid_event, event}
@@ -159,6 +143,37 @@ defmodule Workflows.State.Task do
 
   defp do_project(_state, _activity, event) do
     {:error, :invalid_event, event}
+  end
+
+  defp project_failed(activity, event) do
+    case Enum.find(activity.catch, &Catcher.matches?(&1, event.error)) do
+      nil ->
+        {:fail, event.error}
+
+      catcher ->
+        # Known limitation: ResultPath is not applied to the caught error yet;
+        # see https://states-language.net/#error-handling for the expected behavior.
+        error = %{"Name" => event.error.name, "Cause" => event.error.cause}
+        {:transition, {:next, catcher.next}, error}
+    end
+  end
+
+  defp project_retried(
+         %State.Task{} = state,
+         activity,
+         event,
+         state_args,
+         effective_args,
+         retriers_state
+       ) do
+    case update_retriers_state(retriers_state, activity.retry, event.error, []) do
+      {:ok, new_retriers_state} ->
+        new_inner = {:waiting_response, state_args, effective_args, new_retriers_state}
+        {:stay, %State.Task{state | inner: new_inner}}
+
+      {:error, _reason} ->
+        {:error, :invalid_event, event}
+    end
   end
 
   defp match_retriers([], _retriers, _error) do

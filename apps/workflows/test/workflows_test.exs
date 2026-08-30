@@ -3,8 +3,8 @@ defmodule WorkflowsTest do
   doctest Workflows
 
   alias Workflows.Command
-  alias Workflows.Execution
   alias Workflows.Event
+  alias Workflows.Execution
   alias Workflows.Workflow
 
   @ctx %{
@@ -182,7 +182,7 @@ defmodule WorkflowsTest do
             "WaitOneDay" => %{
               "Type" => "Wait",
               "Next" => "SendEmail",
-              "Seconds" => 86400
+              "Seconds" => 86_400
             },
             "SendEmail" => %{
               "Type" => "Task",

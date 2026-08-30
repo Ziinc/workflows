@@ -5,8 +5,8 @@ defmodule Workflows.Activity.Pass do
   alias Workflows.ActivityUtil
   alias Workflows.Event
   alias Workflows.Path
-  alias Workflows.ReferencePath
   alias Workflows.PayloadTemplate
+  alias Workflows.ReferencePath
 
   @behaviour Activity
 
