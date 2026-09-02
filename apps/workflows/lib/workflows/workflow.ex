@@ -94,10 +94,7 @@ defmodule Workflows.Workflow do
           {:continue, new_state}
 
         {:transition, {:next, activity_name}, args} ->
-          with {:ok, new_activity} <- activity(workflow, activity_name) do
-            new_state = State.create(new_activity, args)
-            {:continue, new_state}
-          end
+          transition_to(workflow, activity_name, args)
 
         {:transition, :end, result} ->
           {:succeed, result}
@@ -105,6 +102,12 @@ defmodule Workflows.Workflow do
         {:succeed, result} ->
           {:succeed, result}
       end
+    end
+  end
+
+  defp transition_to(workflow, activity_name, args) do
+    with {:ok, new_activity} <- activity(workflow, activity_name) do
+      {:continue, State.create(new_activity, args)}
     end
   end
 end

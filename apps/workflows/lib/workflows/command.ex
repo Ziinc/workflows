@@ -1,7 +1,7 @@
 defmodule Workflows.Command do
   @moduledoc false
 
-  alias Workflows.{Activity, Command, Event, Error, Execution}
+  alias Workflows.{Activity, Command, Error, Event, Execution}
 
   @type t :: struct()
 

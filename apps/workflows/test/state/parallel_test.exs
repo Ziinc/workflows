@@ -1,7 +1,7 @@
 defmodule Workflows.State.ParallelTest do
   use ExUnit.Case
 
-  alias Workflows.{Activity, State, Command}
+  alias Workflows.{Activity, Command, State}
 
   @ctx %{
     "state" => "parallel"

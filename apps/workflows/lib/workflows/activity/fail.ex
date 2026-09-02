@@ -2,8 +2,8 @@ defmodule Workflows.Activity.Fail do
   @moduledoc false
 
   alias Workflows.Activity
-  alias Workflows.Event
   alias Workflows.Error
+  alias Workflows.Event
 
   @behaviour Activity
 

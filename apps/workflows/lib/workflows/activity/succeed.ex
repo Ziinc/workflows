@@ -2,9 +2,9 @@ defmodule Workflows.Activity.Succeed do
   @moduledoc false
 
   alias Workflows.Activity
+  alias Workflows.ActivityUtil
   alias Workflows.Event
   alias Workflows.Path
-  alias Workflows.ActivityUtil
 
   @behaviour Activity
 

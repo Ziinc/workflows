@@ -1,4 +1,4 @@
-defmodule Workflows.Activity.Map do
+defmodule Workflows.Activity.Parallel do
   @moduledoc false
 
   alias Workflows.Activity
@@ -6,8 +6,8 @@ defmodule Workflows.Activity.Map do
   alias Workflows.Catcher
   alias Workflows.Event
   alias Workflows.Path
-  alias Workflows.ReferencePath
   alias Workflows.PayloadTemplate
+  alias Workflows.ReferencePath
   alias Workflows.Retrier
   alias Workflows.Workflow
 
@@ -15,9 +15,7 @@ defmodule Workflows.Activity.Map do
 
   @type t :: %__MODULE__{
           name: Activity.name(),
-          iterator: Workflow.t(),
-          items_path: ReferencePath.t() | nil,
-          max_concurrency: non_neg_integer(),
+          branches: nonempty_list(Workflow.t()),
           transition: Activity.transition(),
           input_path: Path.t() | nil,
           output_path: Path.t() | nil,
@@ -30,9 +28,7 @@ defmodule Workflows.Activity.Map do
 
   defstruct [
     :name,
-    :iterator,
-    :items_path,
-    :max_concurrency,
+    :branches,
     :transition,
     :input_path,
     :output_path,
@@ -45,9 +41,7 @@ defmodule Workflows.Activity.Map do
 
   @impl Activity
   def parse(state_name, definition) do
-    with {:ok, iterator} <- parse_iterator(definition),
-         {:ok, items_path} <- parse_items_path(definition),
-         {:ok, max_concurrency} <- parse_max_concurrency(definition),
+    with {:ok, branches} <- parse_branches(definition),
          {:ok, transition} <- ActivityUtil.parse_transition(definition),
          {:ok, input_path} <- ActivityUtil.parse_input_path(definition),
          {:ok, output_path} <- ActivityUtil.parse_output_path(definition),
@@ -58,9 +52,7 @@ defmodule Workflows.Activity.Map do
          {:ok, catch_} <- ActivityUtil.parse_catch(definition) do
       state = %__MODULE__{
         name: state_name,
-        iterator: iterator,
-        items_path: items_path,
-        max_concurrency: max_concurrency,
+        branches: branches,
         transition: transition,
         input_path: input_path,
         output_path: output_path,
@@ -79,7 +71,7 @@ defmodule Workflows.Activity.Map do
   def enter(activity, ctx, args) do
     with {:ok, args} <- ActivityUtil.apply_input_path(activity, args),
          {:ok, effective_args} <- ActivityUtil.apply_parameters(activity, ctx, args) do
-      event = %Event.MapEntered{
+      event = %Event.ParallelEntered{
         activity: activity.name,
         scope: [],
         args: effective_args
@@ -94,7 +86,7 @@ defmodule Workflows.Activity.Map do
     with {:ok, result} <- ActivityUtil.apply_result_selector(activity, ctx, result),
          {:ok, result} <- ActivityUtil.apply_result_path(activity, ctx, result, args),
          {:ok, effective_result} <- ActivityUtil.apply_output_path(activity, result) do
-      event = %Event.MapExited{
+      event = %Event.ParallelExited{
         activity: activity.name,
         scope: [],
         result: effective_result,
@@ -105,8 +97,8 @@ defmodule Workflows.Activity.Map do
     end
   end
 
-  def start_map(activity, _ctx, args) do
-    event = %Event.MapStarted{
+  def start_parallel(activity, _ctx, args) do
+    event = %Event.ParallelStarted{
       activity: activity.name,
       scope: [],
       args: args
@@ -115,8 +107,8 @@ defmodule Workflows.Activity.Map do
     {:ok, event}
   end
 
-  def complete_map(activity, _ctx, result) do
-    event = %Event.MapSucceeded{
+  def complete_parallel(activity, _ctx, result) do
+    event = %Event.ParallelSucceeded{
       activity: activity.name,
       scope: [],
       result: result
@@ -127,28 +119,17 @@ defmodule Workflows.Activity.Map do
 
   ## Private
 
-  defp parse_iterator(%{"Iterator" => iterator}) do
-    Workflow.parse(iterator)
+  defp parse_branches(%{"Branches" => branches}) when is_list(branches) do
+    collect_branches(branches, [])
   end
 
-  defp parse_iterator(_definition), do: {:error, :missing_iterator}
+  defp parse_branches(_definition), do: {:error, :empty_branches}
 
-  defp parse_items_path(%{"ItemsPath" => path}) do
-    ReferencePath.create(path)
-  end
+  defp collect_branches([], acc), do: {:ok, Enum.reverse(acc)}
 
-  defp parse_items_path(_definition) do
-    # The default value of "ItemsPath" is "$", which is to say the whole effective input.
-    ReferencePath.create("$")
-  end
-
-  defp parse_max_concurrency(%{"MaxConcurrency" => concurrency}) do
-    if is_integer(concurrency) and concurrency >= 0 do
-      {:ok, concurrency}
-    else
-      {:error, :invalid_max_concurrency}
+  defp collect_branches([branch | branches], acc) do
+    with {:ok, branch} <- Workflow.parse(branch) do
+      collect_branches(branches, [branch | acc])
     end
   end
-
-  defp parse_max_concurrency(_definition), do: {:ok, 0}
 end

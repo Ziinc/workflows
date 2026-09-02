@@ -1,68 +1,18 @@
-defmodule Workflows.MixProject do
+defmodule Workflows.Umbrella.MixProject do
   use Mix.Project
-
-  @source_url "https://github.com/supabase/workflows"
-  @version "0.2.0"
 
   def project do
     [
-      name: "Workflows",
-      app: :workflows,
-      version: @version,
-      elixir: "~> 1.9",
+      apps_path: "apps",
+      version: "0.2.0",
       start_permanent: Mix.env() == :prod,
-      deps: deps(),
-      dialyzer: dialyzer(),
-      description: description(),
-      package: package(),
-      docs: docs()
+      deps: deps()
     ]
   end
 
-  def application do
-    [
-      extra_applications: [:logger]
-    ]
-  end
-
-  # Run "mix help deps" to learn about dependencies.
+  # Dependencies listed here are available only for this project
+  # and cannot be accessed from applications inside the apps folder.
   defp deps do
-    [
-      {:warpath, "~> 0.6.0"},
-      {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:credo, "~> 1.5", only: [:dev, :test], runtime: false},
-      {:ex_doc, ">= 0.0.0", only: [:dev, :test], runtime: false}
-    ]
-  end
-
-  defp dialyzer do
-    [
-      plt_core_path: "priv/plts",
-      plt_file: {:no_warn, "priv/plts/dialyzer.plt"}
-    ]
-  end
-
-  defp description() do
-    """
-    Amazon States Language workflow interpreter.
-    """
-  end
-
-  defp package() do
-    [
-      maintainers: ["The Supabase Team"],
-      licenses: ["Apache-2.0"],
-      links: %{"GitHub" => @source_url}
-    ]
-  end
-
-  defp docs() do
-    [
-      main: "Workflows",
-      source_ref: "v#{@version}",
-      canonical: "http://hexdocs.pm/workflows",
-      source_url: @source_url,
-      extras: ["CHANGELOG.md", "LICENSE"]
-    ]
+    []
   end
 end

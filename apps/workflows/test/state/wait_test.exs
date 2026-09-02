@@ -1,7 +1,7 @@
 defmodule Workflows.State.WaitTest do
   use ExUnit.Case
 
-  alias Workflows.{Activity, State, Command, Event}
+  alias Workflows.{Activity, Command, Event, State}
 
   @ctx %{
     "state" => "wait"

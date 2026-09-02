@@ -40,31 +40,31 @@ defmodule Workflows.State.Map do
   defp do_execute_command(%State.Map{} = state, %Activity.Map{} = activity, ctx, cmd) do
     case state.inner do
       {:running, _state_args, _effective_args, children} ->
-        case Command.pop_scope(cmd) do
-          {{:item, item_index}, cmd} ->
-            child_state = Enum.at(children, item_index)
-
-            case child_state do
-              {:continue, child_state} ->
-                with {:ok, event} <- Workflow.execute(activity.iterator, child_state, ctx, cmd) do
-                  {
-                    :ok,
-                    event
-                    |> Event.push_scope({:item, item_index})
-                  }
-                end
-
-              _ ->
-                {:error, :invalid_command, cmd}
-            end
-
-          _ ->
-            {:error, :invalid_command, cmd}
-        end
+        execute_running_command(activity, children, ctx, cmd)
 
       _ ->
         {:error, :invalid_command, cmd}
     end
+  end
+
+  defp execute_running_command(activity, children, ctx, cmd) do
+    case Command.pop_scope(cmd) do
+      {{:item, item_index}, cmd} ->
+        execute_child_command(activity, Enum.at(children, item_index), item_index, ctx, cmd)
+
+      _ ->
+        {:error, :invalid_command, cmd}
+    end
+  end
+
+  defp execute_child_command(activity, {:continue, child_state}, item_index, ctx, cmd) do
+    with {:ok, event} <- Workflow.execute(activity.iterator, child_state, ctx, cmd) do
+      {:ok, Event.push_scope(event, {:item, item_index})}
+    end
+  end
+
+  defp execute_child_command(_activity, _child_state, _item_index, _ctx, cmd) do
+    {:error, :invalid_command, cmd}
   end
 
   defp do_project(%State.Map{} = state, activity, event) do
@@ -146,32 +146,56 @@ defmodule Workflows.State.Map do
   defp do_project_scoped(%State.Map{} = state, activity, event) do
     case state.inner do
       {:running, state_args, effective_args, children} ->
-        case Event.pop_scope(event) do
-          {{:item, item_index}, event} ->
-            child_state = Enum.at(children, item_index)
-
-            case child_state do
-              {:continue, child_state} ->
-                new_child_state = project_child(child_state, activity.iterator, event)
-                new_children = List.replace_at(children, item_index, new_child_state)
-
-                new_state = %State.Map{
-                  state
-                  | inner: {:running, state_args, effective_args, new_children}
-                }
-
-                {:stay, new_state}
-
-              _ ->
-                # Wrong item index
-                {:error, :invalid_event, event}
-            end
-
-          {_, _} ->
-            {:error, :invalid_event, event}
-        end
+        project_running_scoped(state, activity, event, state_args, effective_args, children)
 
       _ ->
+        {:error, :invalid_event, event}
+    end
+  end
+
+  defp project_running_scoped(
+         %State.Map{} = state,
+         activity,
+         event,
+         state_args,
+         effective_args,
+         children
+       ) do
+    case Event.pop_scope(event) do
+      {{:item, item_index}, event} ->
+        project_child_scoped(
+          state,
+          activity,
+          event,
+          state_args,
+          effective_args,
+          children,
+          item_index
+        )
+
+      {_, _} ->
+        {:error, :invalid_event, event}
+    end
+  end
+
+  defp project_child_scoped(
+         %State.Map{} = state,
+         activity,
+         event,
+         state_args,
+         effective_args,
+         children,
+         item_index
+       ) do
+    case Enum.at(children, item_index) do
+      {:continue, child_state} ->
+        new_child_state = project_child(child_state, activity.iterator, event)
+        new_children = List.replace_at(children, item_index, new_child_state)
+
+        {:stay, %State.Map{state | inner: {:running, state_args, effective_args, new_children}}}
+
+      _ ->
+        # Wrong item index
         {:error, :invalid_event, event}
     end
   end
@@ -206,27 +230,15 @@ defmodule Workflows.State.Map do
     if max_concurrency > 0 and max_concurrency <= num_running do
       {:ok, :no_event}
     else
-      with {:ok, activity} <- Workflow.activity(iterator, child.activity),
-           {:ok, event} <- State.execute(child, activity, ctx) do
-        case event do
-          :no_event ->
-            execute_child(
-              iterator,
-              children,
-              max_concurrency,
-              num_running + 1,
-              item_index + 1,
-              ctx
-            )
-
-          event ->
-            {
-              :ok,
-              event
-              |> Event.push_scope({:item, item_index})
-            }
-        end
-      end
+      execute_ready_child(
+        iterator,
+        child,
+        children,
+        max_concurrency,
+        num_running,
+        item_index,
+        ctx
+      )
     end
   end
 
@@ -240,6 +252,34 @@ defmodule Workflows.State.Map do
        ) do
     # Succeeded items don't count towards the number of concurrently running tasks
     execute_child(iterator, children, max_concurrency, num_running, item_index + 1, ctx)
+  end
+
+  defp execute_ready_child(
+         iterator,
+         child,
+         children,
+         max_concurrency,
+         num_running,
+         item_index,
+         ctx
+       ) do
+    with {:ok, activity} <- Workflow.activity(iterator, child.activity),
+         {:ok, event} <- State.execute(child, activity, ctx) do
+      case event do
+        :no_event ->
+          execute_child(
+            iterator,
+            children,
+            max_concurrency,
+            num_running + 1,
+            item_index + 1,
+            ctx
+          )
+
+        event ->
+          {:ok, Event.push_scope(event, {:item, item_index})}
+      end
+    end
   end
 
   defp project_child(child_state, iterator, event) do

@@ -16,7 +16,8 @@ defmodule Workflows.PayloadTemplate do
   """
   @spec create(map()) :: {:ok, t()} | {:error, term()}
   def create(template) when is_map(template) do
-    # TODO: validate payload template
+    # Known limitation: the template shape is not validated here; malformed
+    # templates currently only surface as failures when applied.
     {:ok, %__MODULE__{template: template}}
   end
 
@@ -59,7 +60,7 @@ defmodule Workflows.PayloadTemplate do
     if String.ends_with?(key, ".$") do
       with {:ok, value} <- transform_value(value, ctx, args) do
         # remove .$
-        key = String.slice(key, 0..-3)
+        key = String.slice(key, 0..-3//1)
         do_apply(template, ctx, args, [{key, value} | acc])
       end
     else
@@ -72,7 +73,7 @@ defmodule Workflows.PayloadTemplate do
       String.starts_with?(value, "$$") ->
         # JsonPath applied to ctx
         # remove extra $
-        value = String.slice(value, 1..-1)
+        value = String.slice(value, 1..-1//1)
         apply_path(ctx, value)
 
       String.starts_with?(value, "$") ->
@@ -94,21 +95,21 @@ defmodule Workflows.PayloadTemplate do
         {:ok, value}
 
       {:ok, values} when is_list(values) ->
-        has_unmatched? =
-          Enum.any?(values, fn
-            {_, ""} -> true
-            _ -> false
-          end)
-
-        if has_unmatched? do
-          {:error, "States.ParameterPathFailure"}
-        else
-          values = Enum.map(values, fn {value, _} -> value end)
-          {:ok, values}
-        end
+        collect_matched_values(values)
 
       {:error, _} ->
         {:error, "Invalid JsonPath"}
     end
   end
+
+  defp collect_matched_values(values) do
+    if Enum.any?(values, &unmatched?/1) do
+      {:error, "States.ParameterPathFailure"}
+    else
+      {:ok, Enum.map(values, fn {value, _} -> value end)}
+    end
+  end
+
+  defp unmatched?({_, ""}), do: true
+  defp unmatched?(_), do: false
 end

@@ -1,7 +1,7 @@
 defmodule Workflows.State.MapTest do
   use ExUnit.Case
 
-  alias Workflows.{Activity, State, Command}
+  alias Workflows.{Activity, Command, State}
 
   @ctx %{
     "state" => "map"
